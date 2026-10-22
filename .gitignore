@@ -1,0 +1,5 @@
+*.MOV
+*.mov
+*.wav
+brutos/
+__pycache__/
