@@ -2,7 +2,10 @@
 
 Uso: python3 montar.py cortes.txt pasta_videos fonte.ttf trilha.wav saida.mp4
 
-cortes.txt: uma linha por take -> "ARQUIVO INICIO DURACAO" (segundos).
+cortes.txt: uma linha por take -> "ARQUIVO INICIO DURACAO [ZOOM CX CY]".
+ZOOM = fração da altura mantida (1 = quadro inteiro); CX/CY = posição do
+recorte (0 = esquerda/topo, 1 = direita/base). O recorte mantém 9:16, então
+o resultado preenche a tela de stories sem barras pretas.
 Linhas iniciadas com # são ignoradas.
 """
 import os
@@ -12,7 +15,7 @@ import tempfile
 
 W, H, FPS = 1080, 1920, 30
 TITULO = "SÁBADO É DIA DE MESA"
-DUR_TITULO = 3.0
+DUR_TITULO = 4.8  # 2 compassos da trilha: os cortes caem no tempo forte
 
 
 def run(cmd):
@@ -45,12 +48,15 @@ def abertura(fonte, out):
     ])
 
 
-def take(src, ini, dur, out):
-    # Corta, enquadra em 9:16 (crop central), leve ajuste de cor, sem áudio.
+def take(src, ini, dur, out, zoom=1.0, cx=0.5, cy=0.5):
+    # Corta, enquadra em 9:16 (sem barras), leve ajuste de cor, sem áudio.
+    rec = ""
+    if zoom < 1:
+        rec = (f"crop=w=iw*{zoom}:h=ih*{zoom}:"
+               f"x=(iw-iw*{zoom})*{cx}:y=(ih-ih*{zoom})*{cy},")
     vf = (
-        f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-        f"fps={FPS},eq=contrast=1.06:saturation=1.12,"
-        f"fade=t=in:st=0:d=0.15,fade=t=out:st={dur-0.15}:d=0.15,format=yuv420p"
+        f"{rec}scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+        f"fps={FPS},eq=contrast=1.06:saturation=1.12,format=yuv420p"
     )
     run([
         "ffmpeg", "-y", "-v", "error", "-ss", str(ini), "-t", str(dur), "-i", src,
@@ -64,9 +70,9 @@ def main(cortes, pasta, fonte, trilha, saida):
     abertura(fonte, partes[0])
     with open(cortes) as f:
         linhas = [l.split() for l in f if l.strip() and not l.startswith("#")]
-    for i, (arq, ini, dur) in enumerate(linhas, 1):
+    for i, (arq, ini, dur, *rec) in enumerate(linhas, 1):
         out = os.path.join(tmp, f"{i:02d}.mp4")
-        take(os.path.join(pasta, arq), float(ini), float(dur), out)
+        take(os.path.join(pasta, arq), float(ini), float(dur), out, *map(float, rec))
         partes.append(out)
     lista = os.path.join(tmp, "lista.txt")
     with open(lista, "w") as f:
@@ -78,7 +84,9 @@ def main(cortes, pasta, fonte, trilha, saida):
     run([
         "ffmpeg", "-y", "-v", "error", "-i", video, "-i", trilha,
         "-filter_complex", f"[1:a]atrim=0:{total},afade=t=out:st={total-1.5}:d=1.5[a]",
-        "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+        "-vf", f"fade=t=out:st={total-1.0}:d=1.0",
+        "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-crf", "18",
+        "-preset", "medium", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart", "-shortest", saida,
     ])
     print(saida, f"{total:.1f}s")
