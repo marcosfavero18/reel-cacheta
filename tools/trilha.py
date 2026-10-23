@@ -2,7 +2,8 @@
 
 Progressão I–V–vi–IV em Dó maior, 100 BPM, com piano em arpejo, pad,
 baixo e percussão que entra aos poucos até um clímax final.
-Uso: python3 trilha.py saida.wav [duracao_segundos]
+Uso: python3 trilha.py saida.wav [duracao_segundos] [bpm] [compassos_de_intro]
+Com compassos_de_intro=0 a bateria entra já no primeiro tempo (bom para gancho).
 """
 import sys
 import wave
@@ -13,6 +14,7 @@ SR = 44100
 BPM = 100
 BEAT = 60 / BPM
 BAR = BEAT * 4
+INTRO = 2  # compassos só com piano/pad antes do bumbo
 
 # Acordes (notas MIDI): C, G, Am, F
 CHORDS = [
@@ -104,15 +106,15 @@ def main(out, total):
         for k, m in enumerate(arp):
             add(L, piano(m + 12, BEAT, 0.16 + 0.06 * section), t0 + k * BEAT / 2)
         # melodia simples nas barras pares a partir do 2º ciclo
-        if b >= 4:
+        if b >= INTRO + 2:
             mel = [ch[4] + 12, ch[3] + 12, ch[2] + 12, ch[3] + 12]
             for k, m in enumerate(mel):
                 add(L, piano(m, BEAT * 1.5, 0.22), t0 + k * BEAT)
         # percussão entra aos poucos
-        if b >= 2:
+        if b >= INTRO:
             for k in range(4):
-                add(L, kick(0.55 if b < 6 else 0.8), t0 + k * BEAT)
-        if b >= 4:
+                add(L, kick(0.55 if b < INTRO + 4 else 0.8), t0 + k * BEAT)
+        if b >= INTRO + 2:
             for k in (1, 3):
                 add(L, snare(0.22), t0 + k * BEAT)
             for k in range(8):
@@ -140,4 +142,10 @@ def main(out, total):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 3:
+        BPM = float(sys.argv[3])
+        BEAT = 60 / BPM
+        BAR = BEAT * 4
+    if len(sys.argv) > 4:
+        INTRO = int(sys.argv[4])
     main(sys.argv[1], float(sys.argv[2]) if len(sys.argv) > 2 else 31.0)
